@@ -1,0 +1,10 @@
+[project]
+name = "teste-airflow"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "apache-airflow-providers-snowflake[common-compat,slack]>=6.1.1",
+    "apache-airflow[amazon,google]>=2.10.5",
+]
