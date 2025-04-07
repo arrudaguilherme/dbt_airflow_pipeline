@@ -68,6 +68,7 @@ def pipeline():
         gcp_conn_id=GCS_CONN_ID,
     )
 
+    #declare task
     move_files_to_processed_task = move_files_to_processed(
         source_folder=LOCAL_SOURCE_FOLDER,
         destination_folder=LOCAL_DESTINATION_PROCESSED_FOLDER
