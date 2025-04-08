@@ -7,4 +7,6 @@ requires-python = ">=3.12"
 dependencies = [
     "apache-airflow-providers-snowflake[common-compat,slack]>=6.1.1",
     "apache-airflow[amazon,google]>=2.10.5",
+    "dbt-bigquery>=1.9.1",
+    "dbt-core>=1.9.4",
 ]

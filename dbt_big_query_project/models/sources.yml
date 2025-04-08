@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: acidentes_brasil
+    database: dbt-warehouse-455922
+
+    tables:
+      - name: raw_acidentes_brasil

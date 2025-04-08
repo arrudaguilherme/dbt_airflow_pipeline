@@ -15,9 +15,8 @@ from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesyste
 GCS_CONN_ID = 'google_cloud_default'
 SOURCE_BUCKET = 'dbt_datalake'
 DESTINATION_BUCKET = 'bucket2-acidentes'
-DESTINATION_OBJECT = 'teste_bucket/'
+DESTINATION_OBJECT = 'staging/'
 DESTINATION_OBJECT_PROCESSED = 'processed/'
-SOURCE_OBJECT = 'teste/*.csv'
 LOCAL_FILE_SOURCE_BUCKET = 'fs_conn'
 LOCAL_SOURCE_OBJECT = 'data/*.csv'
 
@@ -118,7 +117,7 @@ def pipeline():
         task_id='insert_gcs_to_bigquery',
         bucket=DESTINATION_BUCKET,
         source_objects=[f'{DESTINATION_OBJECT}*.csv'],
-        destination_project_dataset_table='dbt-warehouse-455922.acidentes_brasil.acidentes',
+        destination_project_dataset_table='dbt-warehouse-455922.acidentes_brasil.raw_acidentes_brasil',
         source_format='CSV',
         field_delimiter=';',
         skip_leading_rows=1,
