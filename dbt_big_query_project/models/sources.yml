@@ -1,8 +1,8 @@
 version: 2
 
 sources:
-  - name: acidentes_brasil
-    database: dbt-warehouse-455922
+  - name: acidentes_brasil #(dataset name (schema))
+    database: dbt-warehouse-455922 ## project (database)
 
     tables:
-      - name: raw_acidentes_brasil
+      - name: raw_acidentes_brasil #table name
