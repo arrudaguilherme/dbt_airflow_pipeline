@@ -4,8 +4,11 @@ from airflow.operators.empty import EmptyOperator
 from datetime import datetime, timedelta
 
 import os
+import pandas as pd
+import glob
 
 from airflow.providers.google.cloud.transfers.gcs_to_gcs import GCSToGCSOperator
+from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
 from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
 # todo connection
 
@@ -13,6 +16,7 @@ GCS_CONN_ID = 'google_cloud_default'
 SOURCE_BUCKET = 'dbt_datalake'
 DESTINATION_BUCKET = 'bucket2-acidentes'
 DESTINATION_OBJECT = 'teste_bucket/'
+DESTINATION_OBJECT_PROCESSED = 'processed/'
 SOURCE_OBJECT = 'teste/*.csv'
 LOCAL_FILE_SOURCE_BUCKET = 'fs_conn'
 LOCAL_SOURCE_OBJECT = 'data/*.csv'
@@ -38,6 +42,35 @@ default_args = {
 # to do dag declaration, order of execution
 
 def pipeline():
+
+    @task()
+    def read_and_save_csv_str_column(input_directory, output_directory):
+        # Use glob para buscar todos os arquivos CSV no diretório
+        csv_files = glob.glob(os.path.join(input_directory, '*.csv'))
+        
+        for file_path in csv_files:
+            file_name = os.path.basename(file_path)
+            output_path = os.path.join(output_directory, file_name)
+            
+            # Lê o arquivo CSV com tratamento para valores numéricos com vírgula
+            df = pd.read_csv(file_path, encoding='utf-8', sep=';', dtype={'id': str, 'km': str}, decimal=',')
+            
+            # Limpa as colunas de texto (removendo espaços extras, por exemplo)
+            df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+            
+            # Converte colunas específicas para os tipos desejados, se necessário
+            df['id'] = df['id'].astype(str)  # Converte 'id' para string
+            df['km'] = pd.to_numeric(df['km'], errors='coerce')  # Converte 'km' para numérico, com erro coercivo
+            df['data_inversa'] = pd.to_datetime(df['data_inversa'], errors='coerce', dayfirst=True)  # Converte para datetime, tratando erros
+            
+            # Salva o DataFrame no diretório de saída
+            df.to_csv(output_path, index=False, sep=';', encoding='utf-8')
+            
+            print(f"Arquivo lido e salvo com sucesso em {output_path}")
+        
+        return len(csv_files)
+
+
     @task()
     def move_files_to_processed(source_folder, destination_folder):
         for filename in os.listdir(source_folder):
@@ -58,7 +91,14 @@ def pipeline():
     LOCAL_DESTINATION_PROCESSED_FOLDER = os.path.join(BASE_DIR, 'include', 'data','processed')
     LOCAL_SOURCE_FOLDER = os.path.join(BASE_DIR, 'include', 'data','staging')
 
+    file_paths = glob.glob(LOCAL_SOURCE_OBJECT)
+
     begin = EmptyOperator(task_id='begin')
+
+    read_and_save_csv_str_column_task = read_and_save_csv_str_column(
+        input_directory=LOCAL_SOURCE_FOLDER,
+        output_directory=LOCAL_SOURCE_FOLDER
+    )
 
     copy_from_local_to_gcs = LocalFilesystemToGCSOperator(
         task_id='copy_from_local_to_gcs',
@@ -74,6 +114,28 @@ def pipeline():
         destination_folder=LOCAL_DESTINATION_PROCESSED_FOLDER
     )
 
+    insert_gcs_to_bigquery = GCSToBigQueryOperator(
+        task_id='insert_gcs_to_bigquery',
+        bucket=DESTINATION_BUCKET,
+        source_objects=[f'{DESTINATION_OBJECT}*.csv'],
+        destination_project_dataset_table='dbt-warehouse-455922.acidentes_brasil.acidentes',
+        source_format='CSV',
+        field_delimiter=';',
+        skip_leading_rows=1,
+        write_disposition='WRITE_APPEND',
+        gcp_conn_id=GCS_CONN_ID,
+    )
+
+    move_files_gcs_to_processed_gcs = GCSToGCSOperator(
+        task_id='move_files_gcs_to_processed_gsc',
+        source_bucket=DESTINATION_BUCKET,
+        source_object=DESTINATION_OBJECT,
+        destination_bucket=DESTINATION_BUCKET,
+        destination_object=DESTINATION_OBJECT_PROCESSED,
+        move_object=True,
+        gcp_conn_id=GCS_CONN_ID,
+    )
+
     
 
     end = EmptyOperator(task_id='end')
@@ -81,6 +143,12 @@ def pipeline():
 
 # instanciate the DAG
 
-    begin >> copy_from_local_to_gcs >> move_files_to_processed_task >> end
+    [begin 
+    >> read_and_save_csv_str_column_task
+    >> copy_from_local_to_gcs 
+    >> move_files_to_processed_task 
+    >> insert_gcs_to_bigquery 
+    >> move_files_gcs_to_processed_gcs 
+    >> end]
 
 pipeline()
