@@ -8,5 +8,5 @@ dbt_big_query_project:
       dataset: "{{env_var('DATASET_NAME')}}"
       threads: 4
       priority: interactive
-      job_execution_timeout_seconds: 1
+      job_execution_timeout_seconds: 100
       keyfile: "{{env_var('KEYFILE')}}"
