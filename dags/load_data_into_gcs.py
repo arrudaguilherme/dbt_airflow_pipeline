@@ -7,9 +7,16 @@ import os
 import pandas as pd
 import glob
 
+
 from airflow.providers.google.cloud.transfers.gcs_to_gcs import GCSToGCSOperator
 from airflow.providers.google.cloud.transfers.gcs_to_bigquery import GCSToBigQueryOperator
 from airflow.providers.google.cloud.transfers.local_to_gcs import LocalFilesystemToGCSOperator
+
+from include.dbt.cosmos_config import DBT_PROJECT_CONFIG, DBT_CONFIG
+from cosmos.airflow.task_group import DbtTaskGroup
+from cosmos.constants import LoadMode
+from cosmos.config import ProjectConfig, RenderConfig
+
 # todo connection
 
 GCS_CONN_ID = 'google_cloud_default'
@@ -21,6 +28,8 @@ LOCAL_FILE_SOURCE_BUCKET = 'fs_conn'
 LOCAL_SOURCE_OBJECT = 'data/*.csv'
 
 # todo default arguments
+
+
 default_args = {
     'owner': 'Guilherme Arruda',
     'retries': 1,
@@ -28,7 +37,7 @@ default_args = {
 }
 #todo dafg definition
 @dag(
-    dag_id='Second_operator_dag',
+    dag_id='load_data_into_gcs',
     start_date=datetime(2025, 4, 7),
     max_active_runs=1,
     schedule_interval=timedelta(days=1),
@@ -51,18 +60,18 @@ def pipeline():
             file_name = os.path.basename(file_path)
             output_path = os.path.join(output_directory, file_name)
             
-            # Lê o arquivo CSV com tratamento para valores numéricos com vírgula
+            
             df = pd.read_csv(file_path, encoding='utf-8', sep=';', dtype={'id': str, 'km': str}, decimal=',')
             
-            # Limpa as colunas de texto (removendo espaços extras, por exemplo)
+            
             df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
             
-            # Converte colunas específicas para os tipos desejados, se necessário
-            df['id'] = df['id'].astype(str)  # Converte 'id' para string
-            df['km'] = pd.to_numeric(df['km'], errors='coerce')  # Converte 'km' para numérico, com erro coercivo
-            df['data_inversa'] = pd.to_datetime(df['data_inversa'], errors='coerce', dayfirst=True)  # Converte para datetime, tratando erros
             
-            # Salva o DataFrame no diretório de saída
+            df['id'] = df['id'].astype(str)  
+            df['km'] = pd.to_numeric(df['km'], errors='coerce')  
+            df['data_inversa'] = pd.to_datetime(df['data_inversa'], errors='coerce', dayfirst=True)  
+            
+            
             df.to_csv(output_path, index=False, sep=';', encoding='utf-8')
             
             print(f"Arquivo lido e salvo com sucesso em {output_path}")
@@ -82,6 +91,7 @@ def pipeline():
                 print(f"Moved: {source_file} to {destination_file}")
             else:
                 print(f"Skipped: {filename} (not a CSV file)")
+
 
 
 
@@ -126,7 +136,7 @@ def pipeline():
     )
 
     move_files_gcs_to_processed_gcs = GCSToGCSOperator(
-        task_id='move_files_gcs_to_processed_gsc',
+        task_id='move_files_gcs_to_processed_gcs',
         source_bucket=DESTINATION_BUCKET,
         source_object=DESTINATION_OBJECT,
         destination_bucket=DESTINATION_BUCKET,
@@ -135,7 +145,16 @@ def pipeline():
         gcp_conn_id=GCS_CONN_ID,
     )
 
-    
+    transform = DbtTaskGroup(
+        group_id="transform",
+        project_config=DBT_PROJECT_CONFIG,
+        profile_config=DBT_CONFIG,
+        render_config=RenderConfig(
+            load_method=LoadMode.DBT_LS,
+            select=['path:models/']
+        )
+
+    )
 
     end = EmptyOperator(task_id='end')
     
@@ -148,6 +167,7 @@ def pipeline():
     >> move_files_to_processed_task 
     >> insert_gcs_to_bigquery 
     >> move_files_gcs_to_processed_gcs 
+    >> transform
     >> end]
 
 pipeline()

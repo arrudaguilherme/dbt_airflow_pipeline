@@ -1,0 +1,12 @@
+dbt_big_query_project:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: service-account
+      project: dbt-warehouse-455922
+      dataset: acidentes_brasil
+      threads: 4
+      priority: interactive
+      job_execution_timeout_seconds: 100
+      keyfile: /usr/local/airflow/include/gcp/dbt-warehouse-455922-00e0666d42a5.json
